@@ -1,0 +1,6 @@
+{
+  "name": "Samudera Maritime Fleet OS",
+  "description": "Sistem Manajemen Perusahaan Pelayaran Terpadu dengan koneksi Real Database (Supabase, Neon DB, Firebase), CRUD Master Data, Voyage Tracking, dan Dashboard Real-Time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
