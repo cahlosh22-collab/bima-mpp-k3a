@@ -10,7 +10,7 @@ import {
 // Dynamic loaders for database clients
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { neon } from '@neondatabase/serverless';
-import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { firestore, validateFirestoreConnection, handleFirestoreError, OperationType } from './firebaseService';
 import firebaseAppletConfig from '../../../firebase-applet-config.json';
 
@@ -35,11 +35,40 @@ class DatabaseManager {
   private neonSql: ReturnType<typeof neon> | null = null;
   private firestoreDb = firestore;
 
+  // In-memory synced state
+  private vessels: Vessel[] = [];
+  private ports: Port[] = [];
+  private crews: Crew[] = [];
+  private tariffs: CargoTariff[] = [];
+  private voyages: Voyage[] = [];
+  private bunkerLogs: BunkerLog[] = [];
+  private maintenances: Maintenance[] = [];
+  private manifests: CargoManifest[] = [];
+
+  // Listeners for real-time reactivity
+  private listeners: Set<() => void> = new Set();
+  private isFirestoreInitialized = false;
+
   constructor() {
     this.loadConfig();
-    this.initializeLocalStorage();
+    this.loadInitialLocalStorage();
     this.initRealDatabaseClients();
-    this.seedFirestoreIfEmpty();
+    this.initFirestoreRealtimeSync();
+  }
+
+  public subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notifyListeners(): void {
+    this.listeners.forEach(fn => {
+      try {
+        fn();
+      } catch (err) {
+        console.error('Error notifying DB listener:', err);
+      }
+    });
   }
 
   public getConfig(): DatabaseConfig {
@@ -54,6 +83,7 @@ class DatabaseManager {
       console.warn('Could not save DB config to localStorage', e);
     }
     this.initRealDatabaseClients();
+    this.notifyListeners();
   }
 
   private loadConfig(): void {
@@ -65,6 +95,10 @@ class DatabaseManager {
     } catch (e) {
       console.warn('Could not load DB config from localStorage', e);
     }
+    // Always enforce Firebase as default with provisioned credentials
+    this.config.firebaseApiKey = firebaseAppletConfig.apiKey;
+    this.config.firebaseProjectId = firebaseAppletConfig.projectId;
+    this.config.firebaseAppId = firebaseAppletConfig.appId;
   }
 
   private initRealDatabaseClients(): void {
@@ -92,8 +126,193 @@ class DatabaseManager {
       this.neonSql = null;
     }
 
-    // 3. Firebase Firestore instance
+    // 3. Firestore instance
     this.firestoreDb = firestore;
+  }
+
+  // ===================== REAL-TIME FIRESTORE SYNC =====================
+  private initFirestoreRealtimeSync(): void {
+    if (this.isFirestoreInitialized) return;
+    this.isFirestoreInitialized = true;
+
+    try {
+      // 1. Vessels Snapshot Listener
+      onSnapshot(
+        collection(this.firestoreDb, 'vessels'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const list: Vessel[] = [];
+            snapshot.forEach(docSnap => list.push(docSnap.data() as Vessel));
+            this.vessels = list;
+            this.setItem('vessels', list, false);
+            this.notifyListeners();
+          } else {
+            // Seed if collection is currently empty
+            this.seedFirestoreIfEmpty();
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, 'vessels');
+        }
+      );
+
+      // 2. Ports Snapshot Listener
+      onSnapshot(
+        collection(this.firestoreDb, 'ports'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const list: Port[] = [];
+            snapshot.forEach(docSnap => list.push(docSnap.data() as Port));
+            this.ports = list;
+            this.setItem('ports', list, false);
+            this.notifyListeners();
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, 'ports');
+        }
+      );
+
+      // 3. Crews Snapshot Listener
+      onSnapshot(
+        collection(this.firestoreDb, 'crews'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const list: Crew[] = [];
+            snapshot.forEach(docSnap => list.push(docSnap.data() as Crew));
+            this.crews = list;
+            this.setItem('crews', list, false);
+            this.notifyListeners();
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, 'crews');
+        }
+      );
+
+      // 4. Tariffs Snapshot Listener
+      onSnapshot(
+        collection(this.firestoreDb, 'tariffs'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const list: CargoTariff[] = [];
+            snapshot.forEach(docSnap => list.push(docSnap.data() as CargoTariff));
+            this.tariffs = list;
+            this.setItem('tariffs', list, false);
+            this.notifyListeners();
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, 'tariffs');
+        }
+      );
+
+      // 5. Voyages Snapshot Listener
+      onSnapshot(
+        collection(this.firestoreDb, 'voyages'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const list: Voyage[] = [];
+            snapshot.forEach(docSnap => list.push(docSnap.data() as Voyage));
+            this.voyages = list;
+            this.setItem('voyages', list, false);
+            this.notifyListeners();
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, 'voyages');
+        }
+      );
+
+      // 6. Bunker Logs Snapshot Listener
+      onSnapshot(
+        collection(this.firestoreDb, 'bunker_logs'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const list: BunkerLog[] = [];
+            snapshot.forEach(docSnap => list.push(docSnap.data() as BunkerLog));
+            this.bunkerLogs = list;
+            this.setItem('bunker_logs', list, false);
+            this.notifyListeners();
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, 'bunker_logs');
+        }
+      );
+
+      // 7. Maintenances Snapshot Listener
+      onSnapshot(
+        collection(this.firestoreDb, 'maintenances'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const list: Maintenance[] = [];
+            snapshot.forEach(docSnap => list.push(docSnap.data() as Maintenance));
+            this.maintenances = list;
+            this.setItem('maintenances', list, false);
+            this.notifyListeners();
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, 'maintenances');
+        }
+      );
+
+      // 8. Manifests Snapshot Listener
+      onSnapshot(
+        collection(this.firestoreDb, 'manifests'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const list: CargoManifest[] = [];
+            snapshot.forEach(docSnap => list.push(docSnap.data() as CargoManifest));
+            this.manifests = list;
+            this.setItem('manifests', list, false);
+            this.notifyListeners();
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, 'manifests');
+        }
+      );
+    } catch (e) {
+      console.warn('Realtime Firestore subscription notice:', e);
+    }
+  }
+
+  public async seedFirestoreIfEmpty(): Promise<void> {
+    try {
+      const snap = await getDocs(collection(this.firestoreDb, 'vessels')).catch(() => null);
+      if (!snap || snap.empty) {
+        console.log('Seeding initial maritime dataset to live Firestore database...');
+        for (const v of initialVessels) {
+          await setDoc(doc(this.firestoreDb, 'vessels', v.id), v).catch(err => handleFirestoreError(err, OperationType.WRITE, 'vessels'));
+        }
+        for (const p of initialPorts) {
+          await setDoc(doc(this.firestoreDb, 'ports', p.id), p).catch(err => handleFirestoreError(err, OperationType.WRITE, 'ports'));
+        }
+        for (const c of initialCrews) {
+          await setDoc(doc(this.firestoreDb, 'crews', c.id), c).catch(err => handleFirestoreError(err, OperationType.WRITE, 'crews'));
+        }
+        for (const t of initialTariffs) {
+          await setDoc(doc(this.firestoreDb, 'tariffs', t.id), t).catch(err => handleFirestoreError(err, OperationType.WRITE, 'tariffs'));
+        }
+        for (const voy of initialVoyages) {
+          await setDoc(doc(this.firestoreDb, 'voyages', voy.id), voy).catch(err => handleFirestoreError(err, OperationType.WRITE, 'voyages'));
+        }
+        for (const b of initialBunkerLogs) {
+          await setDoc(doc(this.firestoreDb, 'bunker_logs', b.id), b).catch(err => handleFirestoreError(err, OperationType.WRITE, 'bunker_logs'));
+        }
+        for (const m of initialMaintenances) {
+          await setDoc(doc(this.firestoreDb, 'maintenances', m.id), m).catch(err => handleFirestoreError(err, OperationType.WRITE, 'maintenances'));
+        }
+        for (const mnf of initialManifests) {
+          await setDoc(doc(this.firestoreDb, 'manifests', mnf.id), mnf).catch(err => handleFirestoreError(err, OperationType.WRITE, 'manifests'));
+        }
+        console.log('Live Firestore seeding completed successfully!');
+      }
+    } catch (e) {
+      console.warn('Firestore seed check notice:', e);
+    }
   }
 
   public async testConnection(provider: DatabaseProvider, credentials: Partial<DatabaseConfig>): Promise<{ success: boolean; message: string }> {
@@ -108,11 +327,9 @@ class DatabaseManager {
         if (!url || !key) {
           return { success: false, message: 'Supabase URL dan Anon Key harus diisi.' };
         }
-        // Test query via REST
         const testClient = createClient(url, key);
         const { error } = await testClient.from('vessels').select('id').limit(1);
         if (error && error.code !== 'PGRST116' && !error.message.includes('relation "vessels" does not exist')) {
-          // If error is authentication/url related:
           if (error.message.includes('API key') || error.message.includes('FetchError') || error.message.includes('Failed to fetch')) {
             return { success: false, message: `Gagal terhubung ke Supabase: ${error.message}` };
           }
@@ -147,65 +364,15 @@ class DatabaseManager {
     }
   }
 
-  public async seedFirestoreIfEmpty(): Promise<void> {
-    try {
-      const snap = await getDocs(collection(this.firestoreDb, 'vessels')).catch(() => null);
-      if (!snap || snap.empty) {
-        for (const v of initialVessels) {
-          await setDoc(doc(this.firestoreDb, 'vessels', v.id), v).catch(() => null);
-        }
-        for (const p of initialPorts) {
-          await setDoc(doc(this.firestoreDb, 'ports', p.id), p).catch(() => null);
-        }
-        for (const c of initialCrews) {
-          await setDoc(doc(this.firestoreDb, 'crews', c.id), c).catch(() => null);
-        }
-        for (const t of initialTariffs) {
-          await setDoc(doc(this.firestoreDb, 'tariffs', t.id), t).catch(() => null);
-        }
-        for (const voy of initialVoyages) {
-          await setDoc(doc(this.firestoreDb, 'voyages', voy.id), voy).catch(() => null);
-        }
-        for (const b of initialBunkerLogs) {
-          await setDoc(doc(this.firestoreDb, 'bunker_logs', b.id), b).catch(() => null);
-        }
-        for (const m of initialMaintenances) {
-          await setDoc(doc(this.firestoreDb, 'maintenances', m.id), m).catch(() => null);
-        }
-        for (const mnf of initialManifests) {
-          await setDoc(doc(this.firestoreDb, 'manifests', mnf.id), mnf).catch(() => null);
-        }
-      }
-    } catch (e) {
-      console.warn('Firestore seed notice:', e);
-    }
-  }
-
-  private initializeLocalStorage(): void {
-    if (!localStorage.getItem(STORAGE_KEY_PREFIX + 'vessels')) {
-      this.setItem('vessels', initialVessels);
-    }
-    if (!localStorage.getItem(STORAGE_KEY_PREFIX + 'ports')) {
-      this.setItem('ports', initialPorts);
-    }
-    if (!localStorage.getItem(STORAGE_KEY_PREFIX + 'crews')) {
-      this.setItem('crews', initialCrews);
-    }
-    if (!localStorage.getItem(STORAGE_KEY_PREFIX + 'tariffs')) {
-      this.setItem('tariffs', initialTariffs);
-    }
-    if (!localStorage.getItem(STORAGE_KEY_PREFIX + 'voyages')) {
-      this.setItem('voyages', initialVoyages);
-    }
-    if (!localStorage.getItem(STORAGE_KEY_PREFIX + 'bunker_logs')) {
-      this.setItem('bunker_logs', initialBunkerLogs);
-    }
-    if (!localStorage.getItem(STORAGE_KEY_PREFIX + 'maintenances')) {
-      this.setItem('maintenances', initialMaintenances);
-    }
-    if (!localStorage.getItem(STORAGE_KEY_PREFIX + 'manifests')) {
-      this.setItem('manifests', initialManifests);
-    }
+  private loadInitialLocalStorage(): void {
+    this.vessels = this.getItem<Vessel[]>('vessels', initialVessels);
+    this.ports = this.getItem<Port[]>('ports', initialPorts);
+    this.crews = this.getItem<Crew[]>('crews', initialCrews);
+    this.tariffs = this.getItem<CargoTariff[]>('tariffs', initialTariffs);
+    this.voyages = this.getItem<Voyage[]>('voyages', initialVoyages);
+    this.bunkerLogs = this.getItem<BunkerLog[]>('bunker_logs', initialBunkerLogs);
+    this.maintenances = this.getItem<Maintenance[]>('maintenances', initialMaintenances);
+    this.manifests = this.getItem<CargoManifest[]>('manifests', initialManifests);
   }
 
   private getItem<T>(key: string, fallback: T): T {
@@ -213,31 +380,23 @@ class DatabaseManager {
       const data = localStorage.getItem(STORAGE_KEY_PREFIX + key);
       return data ? JSON.parse(data) : fallback;
     } catch (e) {
-      console.warn(`Error reading ${key} from storage:`, e);
       return fallback;
     }
   }
 
-  private setItem<T>(key: string, data: T): void {
+  private setItem<T>(key: string, data: T, triggerExternalSync = true): void {
     try {
       localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(data));
-      this.syncToExternalDatabases(key, data);
+      if (triggerExternalSync) {
+        this.syncToExternalDatabases(key, data);
+      }
     } catch (e) {
       console.warn(`Error writing ${key} to storage:`, e);
     }
   }
 
-  // Background sync helper if external database is connected
+  // Real-time synchronization to Firestore and other connected DBs
   private async syncToExternalDatabases(table: string, data: any): Promise<void> {
-    if (this.config.provider === 'supabase' && this.supabaseClient) {
-      try {
-        if (Array.isArray(data)) {
-          await this.supabaseClient.from(table).upsert(data);
-        }
-      } catch (err) {
-        console.warn(`Supabase sync warning for ${table}:`, err);
-      }
-    }
     if (this.config.provider === 'firebase' && this.firestoreDb) {
       try {
         if (Array.isArray(data)) {
@@ -251,166 +410,239 @@ class DatabaseManager {
         handleFirestoreError(err, OperationType.WRITE, table);
       }
     }
-  }
 
-  public async deleteFromFirestore(table: string, id: string): Promise<void> {
-    if (this.config.provider === 'firebase' && this.firestoreDb) {
+    if (this.config.provider === 'supabase' && this.supabaseClient) {
       try {
-        await deleteDoc(doc(this.firestoreDb, table, id));
+        if (Array.isArray(data)) {
+          await this.supabaseClient.from(table).upsert(data);
+        }
       } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `${table}/${id}`);
+        console.warn(`Supabase sync warning for ${table}:`, err);
       }
     }
   }
 
   // ===================== CRUD FOR MASTER KAPAL =====================
   public getVessels(): Vessel[] {
-    return this.getItem<Vessel[]>('vessels', initialVessels);
+    return this.vessels.length > 0 ? [...this.vessels] : this.getItem<Vessel[]>('vessels', initialVessels);
   }
 
   public createVessel(vessel: Omit<Vessel, 'id' | 'lastUpdated'> & { lastUpdated?: string }): Vessel {
-    const vessels = this.getVessels();
     const newVessel: Vessel = {
       ...vessel,
       id: 'vessel-' + Date.now(),
       lastUpdated: vessel.lastUpdated || 'Baru saja ditambahkan'
     };
-    vessels.unshift(newVessel);
-    this.setItem('vessels', vessels);
+    this.vessels = [newVessel, ...this.vessels];
+    this.setItem('vessels', this.vessels);
+
+    // Direct write to Firestore
+    setDoc(doc(this.firestoreDb, 'vessels', newVessel.id), newVessel).catch(err => {
+      handleFirestoreError(err, OperationType.CREATE, `vessels/${newVessel.id}`);
+    });
+
+    this.notifyListeners();
     return newVessel;
   }
 
   public updateVessel(id: string, updates: Partial<Vessel>): Vessel | null {
-    const vessels = this.getVessels();
-    const index = vessels.findIndex(v => v.id === id);
+    const index = this.vessels.findIndex(v => v.id === id);
     if (index === -1) return null;
-    vessels[index] = { ...vessels[index], ...updates, lastUpdated: 'Baru diperbarui' };
-    this.setItem('vessels', vessels);
-    return vessels[index];
+    const updated = { ...this.vessels[index], ...updates, lastUpdated: 'Baru diperbarui' };
+    this.vessels[index] = updated;
+    this.setItem('vessels', this.vessels);
+
+    // Direct update to Firestore
+    setDoc(doc(this.firestoreDb, 'vessels', id), updated).catch(err => {
+      handleFirestoreError(err, OperationType.UPDATE, `vessels/${id}`);
+    });
+
+    this.notifyListeners();
+    return updated;
   }
 
   public deleteVessel(id: string): boolean {
-    const vessels = this.getVessels();
-    const filtered = vessels.filter(v => v.id !== id);
-    if (filtered.length === vessels.length) return false;
-    this.setItem('vessels', filtered);
+    const initialLen = this.vessels.length;
+    this.vessels = this.vessels.filter(v => v.id !== id);
+    if (this.vessels.length === initialLen) return false;
+    this.setItem('vessels', this.vessels);
+
+    // Direct delete from Firestore
+    deleteDoc(doc(this.firestoreDb, 'vessels', id)).catch(err => {
+      handleFirestoreError(err, OperationType.DELETE, `vessels/${id}`);
+    });
+
+    this.notifyListeners();
     return true;
   }
 
   // ===================== CRUD FOR MASTER PELABUHAN =====================
   public getPorts(): Port[] {
-    return this.getItem<Port[]>('ports', initialPorts);
+    return this.ports.length > 0 ? [...this.ports] : this.getItem<Port[]>('ports', initialPorts);
   }
 
   public createPort(port: Omit<Port, 'id'>): Port {
-    const ports = this.getPorts();
     const newPort: Port = {
       ...port,
       id: 'port-' + Date.now()
     };
-    ports.push(newPort);
-    this.setItem('ports', ports);
+    this.ports = [...this.ports, newPort];
+    this.setItem('ports', this.ports);
+
+    setDoc(doc(this.firestoreDb, 'ports', newPort.id), newPort).catch(err => {
+      handleFirestoreError(err, OperationType.CREATE, `ports/${newPort.id}`);
+    });
+
+    this.notifyListeners();
     return newPort;
   }
 
   public updatePort(id: string, updates: Partial<Port>): Port | null {
-    const ports = this.getPorts();
-    const index = ports.findIndex(p => p.id === id);
+    const index = this.ports.findIndex(p => p.id === id);
     if (index === -1) return null;
-    ports[index] = { ...ports[index], ...updates };
-    this.setItem('ports', ports);
-    return ports[index];
+    const updated = { ...this.ports[index], ...updates };
+    this.ports[index] = updated;
+    this.setItem('ports', this.ports);
+
+    setDoc(doc(this.firestoreDb, 'ports', id), updated).catch(err => {
+      handleFirestoreError(err, OperationType.UPDATE, `ports/${id}`);
+    });
+
+    this.notifyListeners();
+    return updated;
   }
 
   public deletePort(id: string): boolean {
-    const ports = this.getPorts();
-    const filtered = ports.filter(p => p.id !== id);
-    if (filtered.length === ports.length) return false;
-    this.setItem('ports', filtered);
+    const initialLen = this.ports.length;
+    this.ports = this.ports.filter(p => p.id !== id);
+    if (this.ports.length === initialLen) return false;
+    this.setItem('ports', this.ports);
+
+    deleteDoc(doc(this.firestoreDb, 'ports', id)).catch(err => {
+      handleFirestoreError(err, OperationType.DELETE, `ports/${id}`);
+    });
+
+    this.notifyListeners();
     return true;
   }
 
-  // ===================== CRUD FOR MASTER KRU KAPAL =====================
+  // ===================== CRUD FOR MASTER KRU =====================
   public getCrews(): Crew[] {
-    return this.getItem<Crew[]>('crews', initialCrews);
+    return this.crews.length > 0 ? [...this.crews] : this.getItem<Crew[]>('crews', initialCrews);
   }
 
   public createCrew(crew: Omit<Crew, 'id'>): Crew {
-    const crews = this.getCrews();
     const newCrew: Crew = {
       ...crew,
       id: 'crew-' + Date.now()
     };
-    crews.unshift(newCrew);
-    this.setItem('crews', crews);
+    this.crews = [newCrew, ...this.crews];
+    this.setItem('crews', this.crews);
+
+    setDoc(doc(this.firestoreDb, 'crews', newCrew.id), newCrew).catch(err => {
+      handleFirestoreError(err, OperationType.CREATE, `crews/${newCrew.id}`);
+    });
+
+    this.notifyListeners();
     return newCrew;
   }
 
   public updateCrew(id: string, updates: Partial<Crew>): Crew | null {
-    const crews = this.getCrews();
-    const index = crews.findIndex(c => c.id === id);
+    const index = this.crews.findIndex(c => c.id === id);
     if (index === -1) return null;
-    crews[index] = { ...crews[index], ...updates };
-    this.setItem('crews', crews);
-    return crews[index];
+    const updated = { ...this.crews[index], ...updates };
+    this.crews[index] = updated;
+    this.setItem('crews', this.crews);
+
+    setDoc(doc(this.firestoreDb, 'crews', id), updated).catch(err => {
+      handleFirestoreError(err, OperationType.UPDATE, `crews/${id}`);
+    });
+
+    this.notifyListeners();
+    return updated;
   }
 
   public deleteCrew(id: string): boolean {
-    const crews = this.getCrews();
-    const filtered = crews.filter(c => c.id !== id);
-    if (filtered.length === crews.length) return false;
-    this.setItem('crews', filtered);
+    const initialLen = this.crews.length;
+    this.crews = this.crews.filter(c => c.id !== id);
+    if (this.crews.length === initialLen) return false;
+    this.setItem('crews', this.crews);
+
+    deleteDoc(doc(this.firestoreDb, 'crews', id)).catch(err => {
+      handleFirestoreError(err, OperationType.DELETE, `crews/${id}`);
+    });
+
+    this.notifyListeners();
     return true;
   }
 
-  // ===================== CRUD FOR MASTER TARIF KARGO =====================
+  // ===================== CRUD FOR MASTER TARIF =====================
   public getTariffs(): CargoTariff[] {
-    return this.getItem<CargoTariff[]>('tariffs', initialTariffs);
+    return this.tariffs.length > 0 ? [...this.tariffs] : this.getItem<CargoTariff[]>('tariffs', initialTariffs);
   }
 
   public createTariff(tariff: Omit<CargoTariff, 'id'>): CargoTariff {
-    const tariffs = this.getTariffs();
     const newTariff: CargoTariff = {
       ...tariff,
       id: 'tariff-' + Date.now()
     };
-    tariffs.push(newTariff);
-    this.setItem('tariffs', tariffs);
+    this.tariffs = [...this.tariffs, newTariff];
+    this.setItem('tariffs', this.tariffs);
+
+    setDoc(doc(this.firestoreDb, 'tariffs', newTariff.id), newTariff).catch(err => {
+      handleFirestoreError(err, OperationType.CREATE, `tariffs/${newTariff.id}`);
+    });
+
+    this.notifyListeners();
     return newTariff;
   }
 
   public updateTariff(id: string, updates: Partial<CargoTariff>): CargoTariff | null {
-    const tariffs = this.getTariffs();
-    const index = tariffs.findIndex(t => t.id === id);
+    const index = this.tariffs.findIndex(t => t.id === id);
     if (index === -1) return null;
-    tariffs[index] = { ...tariffs[index], ...updates };
-    this.setItem('tariffs', tariffs);
-    return tariffs[index];
+    const updated = { ...this.tariffs[index], ...updates };
+    this.tariffs[index] = updated;
+    this.setItem('tariffs', this.tariffs);
+
+    setDoc(doc(this.firestoreDb, 'tariffs', id), updated).catch(err => {
+      handleFirestoreError(err, OperationType.UPDATE, `tariffs/${id}`);
+    });
+
+    this.notifyListeners();
+    return updated;
   }
 
   public deleteTariff(id: string): boolean {
-    const tariffs = this.getTariffs();
-    const filtered = tariffs.filter(t => t.id !== id);
-    if (filtered.length === tariffs.length) return false;
-    this.setItem('tariffs', filtered);
+    const initialLen = this.tariffs.length;
+    this.tariffs = this.tariffs.filter(t => t.id !== id);
+    if (this.tariffs.length === initialLen) return false;
+    this.setItem('tariffs', this.tariffs);
+
+    deleteDoc(doc(this.firestoreDb, 'tariffs', id)).catch(err => {
+      handleFirestoreError(err, OperationType.DELETE, `tariffs/${id}`);
+    });
+
+    this.notifyListeners();
     return true;
   }
 
   // ===================== CRUD FOR TRANSAKSI VOYAGE =====================
   public getVoyages(): Voyage[] {
-    return this.getItem<Voyage[]>('voyages', initialVoyages);
+    return this.voyages.length > 0 ? [...this.voyages] : this.getItem<Voyage[]>('voyages', initialVoyages);
   }
 
   public createVoyage(voyage: Omit<Voyage, 'id'>): Voyage {
-    const voyages = this.getVoyages();
     const newVoyage: Voyage = {
       ...voyage,
       id: 'voy-' + Date.now()
     };
-    voyages.unshift(newVoyage);
-    this.setItem('voyages', voyages);
+    this.voyages = [newVoyage, ...this.voyages];
+    this.setItem('voyages', this.voyages);
 
-    // If voyage is underway, automatically set vessel status to Berlayar
+    setDoc(doc(this.firestoreDb, 'voyages', newVoyage.id), newVoyage).catch(err => {
+      handleFirestoreError(err, OperationType.CREATE, `voyages/${newVoyage.id}`);
+    });
+
     if (voyage.status === 'Underway' && voyage.vesselId) {
       this.updateVessel(voyage.vesselId, {
         status: 'Berlayar',
@@ -419,149 +651,208 @@ class DatabaseManager {
       });
     }
 
+    this.notifyListeners();
     return newVoyage;
   }
 
   public updateVoyage(id: string, updates: Partial<Voyage>): Voyage | null {
-    const voyages = this.getVoyages();
-    const index = voyages.findIndex(v => v.id === id);
+    const index = this.voyages.findIndex(v => v.id === id);
     if (index === -1) return null;
-    voyages[index] = { ...voyages[index], ...updates };
-    this.setItem('voyages', voyages);
+    const updated = { ...this.voyages[index], ...updates };
+    this.voyages[index] = updated;
+    this.setItem('voyages', this.voyages);
 
-    // Update vessel status if completed or arrived
+    setDoc(doc(this.firestoreDb, 'voyages', id), updated).catch(err => {
+      handleFirestoreError(err, OperationType.UPDATE, `voyages/${id}`);
+    });
+
     if (updates.status === 'Completed' || updates.status === 'Arrived') {
-      const vesselId = voyages[index].vesselId;
+      const vesselId = this.voyages[index].vesselId;
       if (vesselId) {
         this.updateVessel(vesselId, {
           status: 'Bersandar',
-          currentPortId: voyages[index].destinationPortId
+          currentPortId: this.voyages[index].destinationPortId
         });
       }
     }
 
-    return voyages[index];
+    this.notifyListeners();
+    return updated;
   }
 
   public deleteVoyage(id: string): boolean {
-    const voyages = this.getVoyages();
-    const filtered = voyages.filter(v => v.id !== id);
-    if (filtered.length === voyages.length) return false;
-    this.setItem('voyages', filtered);
+    const initialLen = this.voyages.length;
+    this.voyages = this.voyages.filter(v => v.id !== id);
+    if (this.voyages.length === initialLen) return false;
+    this.setItem('voyages', this.voyages);
+
+    deleteDoc(doc(this.firestoreDb, 'voyages', id)).catch(err => {
+      handleFirestoreError(err, OperationType.DELETE, `voyages/${id}`);
+    });
+
+    this.notifyListeners();
     return true;
   }
 
   // ===================== CRUD FOR TRANSAKSI BUNKER LOG =====================
   public getBunkerLogs(): BunkerLog[] {
-    return this.getItem<BunkerLog[]>('bunker_logs', initialBunkerLogs);
+    return this.bunkerLogs.length > 0 ? [...this.bunkerLogs] : this.getItem<BunkerLog[]>('bunker_logs', initialBunkerLogs);
   }
 
   public createBunkerLog(log: Omit<BunkerLog, 'id'>): BunkerLog {
-    const logs = this.getBunkerLogs();
     const newLog: BunkerLog = {
       ...log,
       id: 'bunk-' + Date.now()
     };
-    logs.unshift(newLog);
-    this.setItem('bunker_logs', logs);
+    this.bunkerLogs = [newLog, ...this.bunkerLogs];
+    this.setItem('bunker_logs', this.bunkerLogs);
+
+    setDoc(doc(this.firestoreDb, 'bunker_logs', newLog.id), newLog).catch(err => {
+      handleFirestoreError(err, OperationType.CREATE, `bunker_logs/${newLog.id}`);
+    });
+
+    this.notifyListeners();
     return newLog;
   }
 
   public updateBunkerLog(id: string, updates: Partial<BunkerLog>): BunkerLog | null {
-    const logs = this.getBunkerLogs();
-    const index = logs.findIndex(b => b.id === id);
+    const index = this.bunkerLogs.findIndex(b => b.id === id);
     if (index === -1) return null;
-    logs[index] = { ...logs[index], ...updates };
-    this.setItem('bunker_logs', logs);
-    return logs[index];
+    const updated = { ...this.bunkerLogs[index], ...updates };
+    this.bunkerLogs[index] = updated;
+    this.setItem('bunker_logs', this.bunkerLogs);
+
+    setDoc(doc(this.firestoreDb, 'bunker_logs', id), updated).catch(err => {
+      handleFirestoreError(err, OperationType.UPDATE, `bunker_logs/${id}`);
+    });
+
+    this.notifyListeners();
+    return updated;
   }
 
   public deleteBunkerLog(id: string): boolean {
-    const logs = this.getBunkerLogs();
-    const filtered = logs.filter(b => b.id !== id);
-    if (filtered.length === logs.length) return false;
-    this.setItem('bunker_logs', filtered);
+    const initialLen = this.bunkerLogs.length;
+    this.bunkerLogs = this.bunkerLogs.filter(b => b.id !== id);
+    if (this.bunkerLogs.length === initialLen) return false;
+    this.setItem('bunker_logs', this.bunkerLogs);
+
+    deleteDoc(doc(this.firestoreDb, 'bunker_logs', id)).catch(err => {
+      handleFirestoreError(err, OperationType.DELETE, `bunker_logs/${id}`);
+    });
+
+    this.notifyListeners();
     return true;
   }
 
   // ===================== CRUD FOR TRANSAKSI MAINTENANCE =====================
   public getMaintenances(): Maintenance[] {
-    return this.getItem<Maintenance[]>('maintenances', initialMaintenances);
+    return this.maintenances.length > 0 ? [...this.maintenances] : this.getItem<Maintenance[]>('maintenances', initialMaintenances);
   }
 
   public createMaintenance(maint: Omit<Maintenance, 'id'>): Maintenance {
-    const maints = this.getMaintenances();
     const newMaint: Maintenance = {
       ...maint,
       id: 'maint-' + Date.now()
     };
-    maints.unshift(newMaint);
-    this.setItem('maintenances', maints);
+    this.maintenances = [newMaint, ...this.maintenances];
+    this.setItem('maintenances', this.maintenances);
+
+    setDoc(doc(this.firestoreDb, 'maintenances', newMaint.id), newMaint).catch(err => {
+      handleFirestoreError(err, OperationType.CREATE, `maintenances/${newMaint.id}`);
+    });
 
     if (maint.status === 'Dalam Pengerjaan' && maint.vesselId) {
       this.updateVessel(maint.vesselId, { status: 'Perawatan' });
     }
 
+    this.notifyListeners();
     return newMaint;
   }
 
   public updateMaintenance(id: string, updates: Partial<Maintenance>): Maintenance | null {
-    const maints = this.getMaintenances();
-    const index = maints.findIndex(m => m.id === id);
+    const index = this.maintenances.findIndex(m => m.id === id);
     if (index === -1) return null;
-    maints[index] = { ...maints[index], ...updates };
-    this.setItem('maintenances', maints);
+    const updated = { ...this.maintenances[index], ...updates };
+    this.maintenances[index] = updated;
+    this.setItem('maintenances', this.maintenances);
 
-    if (updates.status === 'Selesai' && maints[index].vesselId) {
-      this.updateVessel(maints[index].vesselId, { status: 'Bersandar' });
+    setDoc(doc(this.firestoreDb, 'maintenances', id), updated).catch(err => {
+      handleFirestoreError(err, OperationType.UPDATE, `maintenances/${id}`);
+    });
+
+    if (updates.status === 'Selesai' && this.maintenances[index].vesselId) {
+      this.updateVessel(this.maintenances[index].vesselId, { status: 'Bersandar' });
     }
 
-    return maints[index];
+    this.notifyListeners();
+    return updated;
   }
 
   public deleteMaintenance(id: string): boolean {
-    const maints = this.getMaintenances();
-    const filtered = maints.filter(m => m.id !== id);
-    if (filtered.length === maints.length) return false;
-    this.setItem('maintenances', filtered);
+    const initialLen = this.maintenances.length;
+    this.maintenances = this.maintenances.filter(m => m.id !== id);
+    if (this.maintenances.length === initialLen) return false;
+    this.setItem('maintenances', this.maintenances);
+
+    deleteDoc(doc(this.firestoreDb, 'maintenances', id)).catch(err => {
+      handleFirestoreError(err, OperationType.DELETE, `maintenances/${id}`);
+    });
+
+    this.notifyListeners();
     return true;
   }
 
-  // ===================== CRUD FOR TRANSAKSI MANIFEST & BILLING =====================
+  // ===================== CRUD FOR TRANSAKSI MANIFEST =====================
   public getManifests(): CargoManifest[] {
-    return this.getItem<CargoManifest[]>('manifests', initialManifests);
+    return this.manifests.length > 0 ? [...this.manifests] : this.getItem<CargoManifest[]>('manifests', initialManifests);
   }
 
   public createManifest(manifest: Omit<CargoManifest, 'id'>): CargoManifest {
-    const manifests = this.getManifests();
     const newManifest: CargoManifest = {
       ...manifest,
       id: 'mnf-' + Date.now()
     };
-    manifests.unshift(newManifest);
-    this.setItem('manifests', manifests);
+    this.manifests = [newManifest, ...this.manifests];
+    this.setItem('manifests', this.manifests);
+
+    setDoc(doc(this.firestoreDb, 'manifests', newManifest.id), newManifest).catch(err => {
+      handleFirestoreError(err, OperationType.CREATE, `manifests/${newManifest.id}`);
+    });
+
+    this.notifyListeners();
     return newManifest;
   }
 
   public updateManifest(id: string, updates: Partial<CargoManifest>): CargoManifest | null {
-    const manifests = this.getManifests();
-    const index = manifests.findIndex(m => m.id === id);
+    const index = this.manifests.findIndex(m => m.id === id);
     if (index === -1) return null;
-    manifests[index] = { ...manifests[index], ...updates };
-    this.setItem('manifests', manifests);
-    return manifests[index];
+    const updated = { ...this.manifests[index], ...updates };
+    this.manifests[index] = updated;
+    this.setItem('manifests', this.manifests);
+
+    setDoc(doc(this.firestoreDb, 'manifests', id), updated).catch(err => {
+      handleFirestoreError(err, OperationType.UPDATE, `manifests/${id}`);
+    });
+
+    this.notifyListeners();
+    return updated;
   }
 
   public deleteManifest(id: string): boolean {
-    const manifests = this.getManifests();
-    const filtered = manifests.filter(m => m.id !== id);
-    if (filtered.length === manifests.length) return false;
-    this.setItem('manifests', filtered);
+    const initialLen = this.manifests.length;
+    this.manifests = this.manifests.filter(m => m.id !== id);
+    if (this.manifests.length === initialLen) return false;
+    this.setItem('manifests', this.manifests);
+
+    deleteDoc(doc(this.firestoreDb, 'manifests', id)).catch(err => {
+      handleFirestoreError(err, OperationType.DELETE, `manifests/${id}`);
+    });
+
+    this.notifyListeners();
     return true;
   }
 
-  // ===================== REAL-TIME SIMULATOR =====================
-  // Simulates live vessel positions, speed jitter, and fuel consumption
+  // ===================== REAL-TIME TELEMETRY SIMULATION =====================
   public simulateTelemetryTick(): Vessel[] {
     const vessels = this.getVessels();
     let changed = false;
@@ -569,18 +860,14 @@ class DatabaseManager {
     const updatedVessels = vessels.map(vessel => {
       if (vessel.status === 'Berlayar') {
         changed = true;
-        // Minor knot speed fluctuation (+- 0.3 knots)
         const speedDelta = (Math.random() - 0.5) * 0.4;
         const newSpeed = Math.max(10, Math.min(22, +(vessel.speedKnots + speedDelta).toFixed(1)));
 
-        // Slight heading drift along route
         const rad = (vessel.heading * Math.PI) / 180;
-        // Approximate 0.005 degrees per tick
         const latDelta = Math.cos(rad) * 0.004;
         const lonDelta = Math.sin(rad) * 0.004;
 
-        // Minor fuel decrease
-        const fuelDelta = 0.02; // 0.02% decrease
+        const fuelDelta = 0.02;
         const newFuel = Math.max(15, +(vessel.fuelLevelPercent - fuelDelta).toFixed(2));
 
         return {
@@ -589,20 +876,35 @@ class DatabaseManager {
           latitude: +(vessel.latitude + latDelta).toFixed(4),
           longitude: +(vessel.longitude + lonDelta).toFixed(4),
           fuelLevelPercent: newFuel,
-          lastUpdated: 'Live Telemetri (Sinkron detik ini)'
+          lastUpdated: 'Live Telemetri (Sinkron Firestore)'
         };
       }
       return vessel;
     });
 
     if (changed) {
-      this.setItem('vessels', updatedVessels);
+      this.vessels = updatedVessels;
+      this.setItem('vessels', updatedVessels, false);
+      // Periodically update active sailing ship coordinates in Firestore
+      const sailing = updatedVessels.find(v => v.status === 'Berlayar');
+      if (sailing) {
+        setDoc(doc(this.firestoreDb, 'vessels', sailing.id), sailing).catch(() => null);
+      }
     }
     return updatedVessels;
   }
 
   // Reset to initial Indonesian shipping demo state
   public resetToFactoryData(): void {
+    this.vessels = [...initialVessels];
+    this.ports = [...initialPorts];
+    this.crews = [...initialCrews];
+    this.tariffs = [...initialTariffs];
+    this.voyages = [...initialVoyages];
+    this.bunkerLogs = [...initialBunkerLogs];
+    this.maintenances = [...initialMaintenances];
+    this.manifests = [...initialManifests];
+
     this.setItem('vessels', initialVessels);
     this.setItem('ports', initialPorts);
     this.setItem('crews', initialCrews);
@@ -611,6 +913,9 @@ class DatabaseManager {
     this.setItem('bunker_logs', initialBunkerLogs);
     this.setItem('maintenances', initialMaintenances);
     this.setItem('manifests', initialManifests);
+
+    this.seedFirestoreIfEmpty();
+    this.notifyListeners();
   }
 
   // Generate SQL DDL script for Supabase or Neon DB
