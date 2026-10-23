@@ -1,0 +1,213 @@
+{
+  "entities": {
+    "Vessel": {
+      "title": "Vessel",
+      "description": "Master data armada kapal laut maritim",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 200 },
+        "imoNumber": { "type": "string", "maxLength": 50 },
+        "type": { "type": "string", "maxLength": 50 },
+        "flag": { "type": "string", "maxLength": 50 },
+        "dwtCapacity": { "type": "number" },
+        "teuCapacity": { "type": "number" },
+        "yearBuilt": { "type": "number" },
+        "enginePowerHP": { "type": "number" },
+        "status": { "type": "string", "maxLength": 50 },
+        "currentPortId": { "type": "string", "maxLength": 100 },
+        "destinationPortId": { "type": "string", "maxLength": 100 },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "heading": { "type": "number" },
+        "speedKnots": { "type": "number" },
+        "fuelLevelPercent": { "type": "number" },
+        "captainName": { "type": "string", "maxLength": 150 },
+        "fuelCapacityMT": { "type": "number" },
+        "lastUpdated": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "name", "imoNumber", "type", "dwtCapacity", "status"]
+    },
+    "Port": {
+      "title": "Port",
+      "description": "Master data pelabuhan dan terminal maritim",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string", "maxLength": 20 },
+        "name": { "type": "string", "maxLength": 200 },
+        "city": { "type": "string", "maxLength": 100 },
+        "province": { "type": "string", "maxLength": 100 },
+        "country": { "type": "string", "maxLength": 100 },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "maxDraftMeters": { "type": "number" },
+        "berthsCount": { "type": "number" },
+        "contactPhone": { "type": "string", "maxLength": 50 },
+        "harborMaster": { "type": "string", "maxLength": 150 }
+      },
+      "required": ["id", "code", "name", "city"]
+    },
+    "Crew": {
+      "title": "Crew",
+      "description": "Master data perwira dan kru pelaut",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "seamanBookNo": { "type": "string", "maxLength": 50 },
+        "fullName": { "type": "string", "maxLength": 150 },
+        "rank": { "type": "string", "maxLength": 100 },
+        "assignedVesselId": { "type": "string", "maxLength": 100 },
+        "nationality": { "type": "string", "maxLength": 50 },
+        "certificateLevel": { "type": "string", "maxLength": 100 },
+        "licenseExpiry": { "type": "string", "maxLength": 50 },
+        "phoneNumber": { "type": "string", "maxLength": 50 },
+        "emergencyContact": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "maxLength": 50 },
+        "joinDate": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "seamanBookNo", "fullName", "rank", "status"]
+    },
+    "CargoTariff": {
+      "title": "CargoTariff",
+      "description": "Master data tarif kargo freight kapal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string", "maxLength": 50 },
+        "name": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 50 },
+        "baseRatePerUnit": { "type": "number" },
+        "unitName": { "type": "string", "maxLength": 50 },
+        "minimumOrder": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "code", "name", "category", "baseRatePerUnit"]
+    },
+    "Voyage": {
+      "title": "Voyage",
+      "description": "Transaksi jadwal dan voyage pelayaran",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "voyageNumber": { "type": "string", "maxLength": 50 },
+        "vesselId": { "type": "string", "maxLength": 100 },
+        "originPortId": { "type": "string", "maxLength": 100 },
+        "destinationPortId": { "type": "string", "maxLength": 100 },
+        "etd": { "type": "string", "maxLength": 50 },
+        "eta": { "type": "string", "maxLength": 50 },
+        "cargoCategory": { "type": "string", "maxLength": 100 },
+        "cargoVolume": { "type": "number" },
+        "cargoUnit": { "type": "string", "maxLength": 50 },
+        "freightRatePerUnit": { "type": "number" },
+        "freightRevenue": { "type": "number" },
+        "estimatedFuelMT": { "type": "number" },
+        "distanceNauticalMiles": { "type": "number" },
+        "status": { "type": "string", "maxLength": 50 },
+        "captainOnDuty": { "type": "string", "maxLength": 150 },
+        "remarks": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "voyageNumber", "vesselId", "originPortId", "destinationPortId", "status"]
+    },
+    "BunkerLog": {
+      "title": "BunkerLog",
+      "description": "Transaksi logbook konsumsi harian bahan bakar kapal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "vesselId": { "type": "string", "maxLength": 100 },
+        "voyageId": { "type": "string", "maxLength": 100 },
+        "logDate": { "type": "string", "maxLength": 50 },
+        "fuelType": { "type": "string", "maxLength": 50 },
+        "consumptionMT": { "type": "number" },
+        "stockRemainingMT": { "type": "number" },
+        "avgEngineRPM": { "type": "number" },
+        "avgSpeedKnots": { "type": "number" },
+        "distanceRunNM": { "type": "number" },
+        "seaState": { "type": "string", "maxLength": 50 },
+        "recordedBy": { "type": "string", "maxLength": 150 },
+        "notes": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "vesselId", "logDate", "fuelType", "consumptionMT"]
+    },
+    "Maintenance": {
+      "title": "Maintenance",
+      "description": "Transaksi pemeliharaan dan docking galangan kapal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "workOrderNumber": { "type": "string", "maxLength": 50 },
+        "vesselId": { "type": "string", "maxLength": 100 },
+        "title": { "type": "string", "maxLength": 200 },
+        "type": { "type": "string", "maxLength": 50 },
+        "priority": { "type": "string", "maxLength": 50 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "estimatedCost": { "type": "number" },
+        "actualCost": { "type": "number" },
+        "startDate": { "type": "string", "maxLength": 50 },
+        "targetEndDate": { "type": "string", "maxLength": 50 },
+        "dockyardVendor": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "maxLength": 50 },
+        "technicianInCharge": { "type": "string", "maxLength": 150 },
+        "approvedBy": { "type": "string", "maxLength": 150 }
+      },
+      "required": ["id", "workOrderNumber", "vesselId", "title", "status"]
+    },
+    "CargoManifest": {
+      "title": "CargoManifest",
+      "description": "Transaksi manifest kargo dan Bill of Lading",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "manifestNumber": { "type": "string", "maxLength": 50 },
+        "billOfLadingNo": { "type": "string", "maxLength": 50 },
+        "voyageId": { "type": "string", "maxLength": 100 },
+        "shipperName": { "type": "string", "maxLength": 200 },
+        "consigneeName": { "type": "string", "maxLength": 200 },
+        "goodsDescription": { "type": "string", "maxLength": 500 },
+        "packageCount": { "type": "number" },
+        "weightTon": { "type": "number" },
+        "volumeCbm": { "type": "number" },
+        "freightAmount": { "type": "number" },
+        "paymentStatus": { "type": "string", "maxLength": 50 },
+        "issueDate": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "manifestNumber", "billOfLadingNo", "shipperName", "consigneeName", "freightAmount"]
+    }
+  },
+  "firestore": {
+    "/vessels/{vesselId}": {
+      "schema": "Vessel",
+      "description": "Master data armada kapal laut"
+    },
+    "/ports/{portId}": {
+      "schema": "Port",
+      "description": "Master data pelabuhan dan terminal maritim"
+    },
+    "/crews/{crewId}": {
+      "schema": "Crew",
+      "description": "Master data perwira dan kru kapal"
+    },
+    "/tariffs/{tariffId}": {
+      "schema": "CargoTariff",
+      "description": "Master data tarif kargo freight"
+    },
+    "/voyages/{voyageId}": {
+      "schema": "Voyage",
+      "description": "Transaksi jadwal dan voyage pelayaran kapal"
+    },
+    "/bunker_logs/{bunkerLogId}": {
+      "schema": "BunkerLog",
+      "description": "Transaksi pencatatan harian konsumsi bunker BBM"
+    },
+    "/maintenances/{maintenanceId}": {
+      "schema": "Maintenance",
+      "description": "Transaksi pemeliharaan dan docking galangan kapal"
+    },
+    "/manifests/{manifestId}": {
+      "schema": "CargoManifest",
+      "description": "Transaksi manifest muatan dan tagihan freight"
+    }
+  }
+}

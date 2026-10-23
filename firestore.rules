@@ -1,0 +1,81 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    // 1. Master Kapal (vessels)
+    match /vessels/{vesselId} {
+      allow read: if true;
+      allow write: if isValidId(vesselId)
+        && incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 200
+        && incoming().imoNumber is string && incoming().imoNumber.size() <= 50;
+    }
+
+    // 2. Master Pelabuhan (ports)
+    match /ports/{portId} {
+      allow read: if true;
+      allow write: if isValidId(portId)
+        && incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 200
+        && incoming().code is string && incoming().code.size() <= 20;
+    }
+
+    // 3. Master Kru Kapal (crews)
+    match /crews/{crewId} {
+      allow read: if true;
+      allow write: if isValidId(crewId)
+        && incoming().fullName is string && incoming().fullName.size() > 0 && incoming().fullName.size() <= 150
+        && incoming().seamanBookNo is string && incoming().seamanBookNo.size() <= 50;
+    }
+
+    // 4. Master Tarif Kargo (tariffs)
+    match /tariffs/{tariffId} {
+      allow read: if true;
+      allow write: if isValidId(tariffId)
+        && incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 200
+        && incoming().code is string && incoming().code.size() <= 50;
+    }
+
+    // 5. Transaksi Voyage (voyages)
+    match /voyages/{voyageId} {
+      allow read: if true;
+      allow write: if isValidId(voyageId)
+        && incoming().voyageNumber is string && incoming().voyageNumber.size() > 0 && incoming().voyageNumber.size() <= 50;
+    }
+
+    // 6. Transaksi Bunker Logs (bunker_logs)
+    match /bunker_logs/{bunkerLogId} {
+      allow read: if true;
+      allow write: if isValidId(bunkerLogId)
+        && incoming().vesselId is string && incoming().vesselId.size() <= 100
+        && incoming().fuelType is string && incoming().fuelType.size() <= 50;
+    }
+
+    // 7. Transaksi Maintenance (maintenances)
+    match /maintenances/{maintenanceId} {
+      allow read: if true;
+      allow write: if isValidId(maintenanceId)
+        && incoming().workOrderNumber is string && incoming().workOrderNumber.size() > 0 && incoming().workOrderNumber.size() <= 50;
+    }
+
+    // 8. Transaksi Manifest Kargo (manifests)
+    match /manifests/{manifestId} {
+      allow read: if true;
+      allow write: if isValidId(manifestId)
+        && incoming().manifestNumber is string && incoming().manifestNumber.size() > 0 && incoming().manifestNumber.size() <= 50;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

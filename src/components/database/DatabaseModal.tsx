@@ -402,6 +402,24 @@ export const DatabaseModal: React.FC<DatabaseModalProps> = ({ isOpen, onClose, o
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   Simpan & Aktifkan Firebase
                 </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsTesting(true);
+                    await dbManager.seedFirestoreIfEmpty();
+                    setIsTesting(false);
+                    setTestResult({
+                      success: true,
+                      message: 'Seluruh koleksi Master Data, Transaksi Voyage, Log Bunker, dan Manifest berhasil disinkronkan ke Firebase Firestore!'
+                    });
+                    onConfigChanged();
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-semibold flex items-center gap-2 border border-amber-500/30 ml-auto"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Sinkronkan Seluruh Data ke Firestore
+                </button>
               </div>
             </div>
           )}

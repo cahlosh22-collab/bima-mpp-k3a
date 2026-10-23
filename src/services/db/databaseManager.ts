@@ -7,24 +7,25 @@ import {
   initialVoyages, initialBunkerLogs, initialMaintenances, initialManifests 
 } from './initialData';
 
-// Dynamic loaders for database clients to prevent crashes if configurations are not provided
+// Dynamic loaders for database clients
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { neon } from '@neondatabase/serverless';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { firestore, validateFirestoreConnection, handleFirestoreError, OperationType } from './firebaseService';
+import firebaseAppletConfig from '../../../firebase-applet-config.json';
 
 const STORAGE_KEY_PREFIX = 'samudera_shipping_';
 const CONFIG_KEY = 'samudera_db_config';
 
 class DatabaseManager {
   private config: DatabaseConfig = {
-    provider: 'local',
+    provider: 'firebase',
     supabaseUrl: '',
     supabaseAnonKey: '',
     neonConnectionString: '',
-    firebaseApiKey: '',
-    firebaseProjectId: '',
-    firebaseAppId: '',
+    firebaseApiKey: firebaseAppletConfig.apiKey,
+    firebaseProjectId: firebaseAppletConfig.projectId,
+    firebaseAppId: firebaseAppletConfig.appId,
     isConnected: true,
     lastConnectedAt: new Date().toISOString(),
     syncStatus: 'synced',
@@ -32,12 +33,13 @@ class DatabaseManager {
 
   private supabaseClient: SupabaseClient | null = null;
   private neonSql: ReturnType<typeof neon> | null = null;
-  private firestoreDb: ReturnType<typeof getFirestore> | null = null;
+  private firestoreDb = firestore;
 
   constructor() {
     this.loadConfig();
     this.initializeLocalStorage();
     this.initRealDatabaseClients();
+    this.seedFirestoreIfEmpty();
   }
 
   public getConfig(): DatabaseConfig {
@@ -90,23 +92,8 @@ class DatabaseManager {
       this.neonSql = null;
     }
 
-    // 3. Firebase Init
-    if (this.config.firebaseApiKey && this.config.firebaseProjectId) {
-      try {
-        const firebaseConfig = {
-          apiKey: this.config.firebaseApiKey,
-          projectId: this.config.firebaseProjectId,
-          appId: this.config.firebaseAppId || '1:1234567890:web:abcdef',
-        };
-        const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-        this.firestoreDb = getFirestore(app);
-      } catch (err) {
-        console.error('Failed to init Firebase app:', err);
-        this.firestoreDb = null;
-      }
-    } else {
-      this.firestoreDb = null;
-    }
+    // 3. Firebase Firestore instance
+    this.firestoreDb = firestore;
   }
 
   public async testConnection(provider: DatabaseProvider, credentials: Partial<DatabaseConfig>): Promise<{ success: boolean; message: string }> {
@@ -150,21 +137,47 @@ class DatabaseManager {
       }
 
       if (provider === 'firebase') {
-        const apiKey = credentials.firebaseApiKey || this.config.firebaseApiKey;
-        const projectId = credentials.firebaseProjectId || this.config.firebaseProjectId;
-        if (!apiKey || !projectId) {
-          return { success: false, message: 'Firebase API Key dan Project ID harus diisi.' };
-        }
-        const testApp = initializeApp({ apiKey, projectId }, 'test-firebase-instance-' + Date.now());
-        const testDb = getFirestore(testApp);
-        // Attempt reading a document / collection
-        await getDocs(collection(testDb, '_health_check')).catch(() => null);
-        return { success: true, message: `Berhasil terhubung ke Firebase Firestore Project (${projectId})!` };
+        const res = await validateFirestoreConnection();
+        return res;
       }
 
       return { success: false, message: 'Provider tidak dikenali.' };
     } catch (err: any) {
       return { success: false, message: `Error koneksi: ${err.message || String(err)}` };
+    }
+  }
+
+  public async seedFirestoreIfEmpty(): Promise<void> {
+    try {
+      const snap = await getDocs(collection(this.firestoreDb, 'vessels')).catch(() => null);
+      if (!snap || snap.empty) {
+        for (const v of initialVessels) {
+          await setDoc(doc(this.firestoreDb, 'vessels', v.id), v).catch(() => null);
+        }
+        for (const p of initialPorts) {
+          await setDoc(doc(this.firestoreDb, 'ports', p.id), p).catch(() => null);
+        }
+        for (const c of initialCrews) {
+          await setDoc(doc(this.firestoreDb, 'crews', c.id), c).catch(() => null);
+        }
+        for (const t of initialTariffs) {
+          await setDoc(doc(this.firestoreDb, 'tariffs', t.id), t).catch(() => null);
+        }
+        for (const voy of initialVoyages) {
+          await setDoc(doc(this.firestoreDb, 'voyages', voy.id), voy).catch(() => null);
+        }
+        for (const b of initialBunkerLogs) {
+          await setDoc(doc(this.firestoreDb, 'bunker_logs', b.id), b).catch(() => null);
+        }
+        for (const m of initialMaintenances) {
+          await setDoc(doc(this.firestoreDb, 'maintenances', m.id), m).catch(() => null);
+        }
+        for (const mnf of initialManifests) {
+          await setDoc(doc(this.firestoreDb, 'manifests', mnf.id), mnf).catch(() => null);
+        }
+      }
+    } catch (e) {
+      console.warn('Firestore seed notice:', e);
     }
   }
 
@@ -235,7 +248,17 @@ class DatabaseManager {
           }
         }
       } catch (err) {
-        console.warn(`Firebase sync warning for ${table}:`, err);
+        handleFirestoreError(err, OperationType.WRITE, table);
+      }
+    }
+  }
+
+  public async deleteFromFirestore(table: string, id: string): Promise<void> {
+    if (this.config.provider === 'firebase' && this.firestoreDb) {
+      try {
+        await deleteDoc(doc(this.firestoreDb, table, id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `${table}/${id}`);
       }
     }
   }
